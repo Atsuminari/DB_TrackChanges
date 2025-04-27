@@ -1,5 +1,5 @@
 from sqlalchemy import text, inspect
-from src.adapter.schema_extractor_adapter import SchemaExtractorAdapter
+from adapter.schema_extractor_adapter import SchemaExtractorAdapter
 
 class MSSQLSchemaExtractor(SchemaExtractorAdapter):
     def extract_schema(self, file_exporter=None, database=None) -> dict:

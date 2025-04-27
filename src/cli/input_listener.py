@@ -2,8 +2,8 @@ import argparse
 import os
 import json
 
-from src.constants.constants import SUPPORTED_SGBD, SYSTEM_TABLE_SGBD
-from src.core import Core
+from constants.constants import SUPPORTED_SGBD, SYSTEM_TABLE_SGBD
+from core import Core
 
 class input_listener:
     def __init__(self):

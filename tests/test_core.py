@@ -2,7 +2,7 @@ import os
 import pytest
 from unittest.mock import patch, MagicMock
 
-from src.core import Core
+from core import Core
 
 @pytest.fixture
 def core_instance(tmp_path):
@@ -18,11 +18,11 @@ def core_instance(tmp_path):
         exclude_system_databases=True
     )
 
-@patch("src.core.FileExporter")
-@patch("src.core.DatabaseExtractor")
-@patch("src.core.Logger")
-@patch("src.core.DocumentationExporter")
-@patch("src.core.FileHandler")
+@patch("core.FileExporter")
+@patch("core.DatabaseExtractor")
+@patch("core.Logger")
+@patch("core.DocumentationExporter")
+@patch("core.FileHandler")
 def test_run_success(mock_filehandler, mock_docexporter, mock_logger, mock_dbextractor, mock_fileexporter, core_instance):
     # Mock database extractor behavior
     mock_extractor_instance = MagicMock()
@@ -55,9 +55,9 @@ def test_run_success(mock_filehandler, mock_docexporter, mock_logger, mock_dbext
     mock_docexporter.assert_called_once()
     mock_filehandler.assert_called_once()
 
-@patch("src.core.FileExporter")
-@patch("src.core.DatabaseExtractor")
-@patch("src.core.Logger")
+@patch("core.FileExporter")
+@patch("core.DatabaseExtractor")
+@patch("core.Logger")
 def test_run_no_databases(mock_logger, mock_dbextractor, mock_fileexporter, core_instance):
     # Mock database extractor behavior to return no databases
     mock_extractor_instance = MagicMock()
@@ -67,9 +67,9 @@ def test_run_no_databases(mock_logger, mock_dbextractor, mock_fileexporter, core
     with pytest.raises(ValueError, match="No databases found or unable to connect"):
         core_instance.run()
 
-@patch("src.core.FileExporter")
-@patch("src.core.DatabaseExtractor")
-@patch("src.core.Logger")
+@patch("core.FileExporter")
+@patch("core.DatabaseExtractor")
+@patch("core.Logger")
 def test_run_with_restricted_database(mock_logger, mock_dbextractor, mock_fileexporter, core_instance):
     # Mock database extractor returning a restricted database
     mock_extractor_instance = MagicMock()
@@ -94,7 +94,7 @@ def test_run_with_restricted_database(mock_logger, mock_dbextractor, mock_fileex
             {"tables": {"table1": {}}}, "userdb", os.path.join(core_instance.outputDir, "userdb")
         )
 
-@patch("src.core.DocumentationExporter")
+@patch("core.DocumentationExporter")
 def test_generate_documentation_invalid_json(mock_docexporter, core_instance, tmp_path):
     # Force DocumentationExporter to raise ValueError
     mock_docexporter.side_effect = ValueError("Invalid JSON")
@@ -106,7 +106,7 @@ def test_generate_documentation_invalid_json(mock_docexporter, core_instance, tm
     # Should not raise, just pass
     core_instance._Core__generate_documentation(schema, db_name, db_output_dir)
 
-@patch("src.core.FileHandler")
+@patch("core.FileHandler")
 def test_save_schema_success(mock_filehandler, core_instance, tmp_path):
     mock_file_handler_instance = MagicMock()
     mock_filehandler.return_value = mock_file_handler_instance

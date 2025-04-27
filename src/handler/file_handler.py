@@ -1,7 +1,7 @@
 import json
 import os
 
-from src.utils.logger import Logger
+from utils.logger import Logger
 
 
 class FileHandler:

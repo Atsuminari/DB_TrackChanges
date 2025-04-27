@@ -1,5 +1,5 @@
-from src.handler.file_handler import FileHandler
-from src.utils.schema_updater import SchemaUpdater
+from handler.file_handler import FileHandler
+from utils.schema_updater import SchemaUpdater
 
 
 class DocumentationExporter:

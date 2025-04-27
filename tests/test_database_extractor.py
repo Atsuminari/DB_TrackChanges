@@ -1,6 +1,6 @@
 import pytest
 from unittest.mock import MagicMock, patch
-from src.database.extractor.database_extractor import DatabaseExtractor
+from database.extractor.database_extractor import DatabaseExtractor
 
 
 
@@ -14,8 +14,8 @@ def database_extractor():
         password="password"
     )
 
-@patch('src.database.connection.DatabaseConnection.create_engine')
-@patch('src.database.factory.DatabaseExtractorFactory.create_extractor')
+@patch('database.connection.DatabaseConnection.create_engine')
+@patch('database.factory.DatabaseExtractorFactory.create_extractor')
 def test_list_databases(mock_create_extractor, mock_create_engine, database_extractor):
     # Arrange
     mock_engine = MagicMock()

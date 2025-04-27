@@ -1,7 +1,7 @@
 import os
 import pytest
 
-from src.export.documentation_exporter import DocumentationExporter
+from export.documentation_exporter import DocumentationExporter
 
 
 @pytest.fixture

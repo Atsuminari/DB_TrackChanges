@@ -1,6 +1,6 @@
-from src.database.connection import DatabaseConnection
-from src.database.extractor.mssql_extractor import MSSQLSchemaExtractor
-from src.database.extractor.mysql_extractor import MySQLSchemaExtractor
+from database.connection import DatabaseConnection
+from database.extractor.mssql_extractor import MSSQLSchemaExtractor
+from database.extractor.mysql_extractor import MySQLSchemaExtractor
 
 class DatabaseExtractorFactory:
     @staticmethod

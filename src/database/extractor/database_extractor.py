@@ -1,5 +1,5 @@
-from src.database.connection import DatabaseConnection
-from src.database.factory import DatabaseExtractorFactory
+from database.connection import DatabaseConnection
+from database.factory import DatabaseExtractorFactory
 
 class DatabaseExtractor:
     def __init__(self, db_type, host, port, user, password, databases=None):

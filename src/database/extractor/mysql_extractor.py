@@ -1,5 +1,5 @@
 from sqlalchemy import text, inspect
-from src.adapter.schema_extractor_adapter import SchemaExtractorAdapter
+from adapter.schema_extractor_adapter import SchemaExtractorAdapter
 
 
 class MySQLSchemaExtractor(SchemaExtractorAdapter):

@@ -1,11 +1,11 @@
 import os
 
-from src.database.extractor.database_extractor import DatabaseExtractor
-from src.export.documentation_exporter import DocumentationExporter
-from src.export.file_exporter import FileExporter
-from src.handler.file_handler import FileHandler
-from src.utils.logger import Logger
-from src.utils.schema_updater import SchemaUpdater
+from database.extractor.database_extractor import DatabaseExtractor
+from export.documentation_exporter import DocumentationExporter
+from export.file_exporter import FileExporter
+from handler.file_handler import FileHandler
+from utils.logger import Logger
+from utils.schema_updater import SchemaUpdater
 
 
 class Core:
