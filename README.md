@@ -25,10 +25,33 @@ pip install -r requirements.txt
 
 ## Usage
 
-To start using DB_TrackChanges, configure your database connection, for example:
+This program is CLI-based and can be run from the command line.
 
-```python
+```cmd
+> DB_TrackChanges_1.1.0.exe --help 
 
+Export DB schema to JSON.
+
+options:
+  -h, --help            show this help message and exit
+  --db_type DB_TYPE     Database type (supported SGBD: mssql, mariadb, mysql)
+  --host HOST           Database host
+  --port PORT           Database port
+  --user USER           Database user
+  --password PASSWORD   Database password
+  --output OUTPUT       Output directory
+  --restriction_list RESTRICTION_LIST
+                        Path to JSON file containing a list of restricted databases or tables to exclude.
+  --exclude_system_databases EXCLUDE_SYSTEM_DATABASES
+                        Exclude system databases like 'sys' or 'master' (default: True)
+  --databases [DATABASES ...]
+                        List of databases to export. (default: all databases)
+```
+
+### Example
+
+```bash
+DB_TrackChanges_1.1.0.exe --db_type mssql --host 127.0.0.1 --port 1433 --user sa --password "Strong!Passw0rd" --output ./export
 ```
 
 This script will extract the schema from your database and save it in the specified output directory.
