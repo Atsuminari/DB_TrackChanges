@@ -30,6 +30,8 @@ class DatabaseConnection:
 
             if not self.use_windows_auth:
                 auth_part = f"UID={self.user};PWD={self.password};"
+            else:
+                auth_part = f"Trusted_Connection=yes;"
 
             params = urllib.parse.quote_plus(
                 base_conn_str + auth_part + "TrustServerCertificate=yes;"
