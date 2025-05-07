@@ -3,6 +3,7 @@ from adapter.schema_extractor_adapter import SchemaExtractorAdapter
 
 
 class MySQLSchemaExtractor(SchemaExtractorAdapter):
+
     def extract_schema(self, file_exporter=None, database=None) -> dict:
         """
         Extract the schema of the database including tables, procedures, functions, and triggers.
@@ -13,82 +14,98 @@ class MySQLSchemaExtractor(SchemaExtractorAdapter):
         schema = {'tables': {}, 'views': {}, 'procedures': {}, 'functions': {}, 'triggers': {}}
 
         with self.connection.engine.connect() as conn:
+
             # -------------------------------------------------------------
             # TABLES
             # -------------------------------------------------------------
+            try:
+                tables = conn.execute(text("SHOW FULL TABLES WHERE Table_type = 'BASE TABLE'")).fetchall()
 
-            tables = conn.execute(text("SHOW FULL TABLES WHERE Table_type = 'BASE TABLE'")).fetchall()
+                for table in tables:
+                    schema['tables'][table[0]] = self.__extract_table_details(conn, table[0], database)
 
-            for table in tables:
-                schema['tables'][table[0]] = self.__extract_table_details(conn, table[0], database)
+                    create_table_script = self.__generate_create_table_script(
+                        table[0],
+                        schema['tables'][table[0]]['columns'],
+                        schema['tables'][table[0]]['primary_key'],
+                        schema['tables'][table[0]]['foreign_keys'],
+                        schema['tables'][table[0]]['checks']
+                    )
 
-                create_table_script = self.__generate_create_table_script(
-                    table[0],
-                    schema['tables'][table[0]]['columns'],
-                    schema['tables'][table[0]]['primary_key'],
-                    schema['tables'][table[0]]['foreign_keys'],
-                    schema['tables'][table[0]]['checks']
-                )
-
-                if file_exporter:
-                    file_exporter.save_sql('tables', table[0], create_table_script)
+                    if file_exporter:
+                        file_exporter.save_sql('tables', table[0], create_table_script)
+            except Exception as e:
+                schema['tables'] = {'error': f'Could not read tables: {str(e)}'}
 
 
             # -------------------------------------------------------------
             # VIEWS
             # -------------------------------------------------------------
-
-            views = conn.execute(text("SHOW FULL TABLES WHERE Table_type = 'VIEW'")).fetchall()
-            for view in views:
-                name = view[0]
-                schema["views"] = self.__extract_ddl_details(conn, file_exporter, "View", name)
-                schema['views'][view[0]] = self.__extract_view_details(conn, view[0])
+            try:
+                views = conn.execute(text("SHOW FULL TABLES WHERE Table_type = 'VIEW'")).fetchall()
+                for view in views:
+                    name = view[0]
+                    schema["views"][name] = self.__extract_view_details(conn, name)
+                    if file_exporter:
+                        ddl = self.__extract_ddl_details(conn, file_exporter, "View", name)
+                        schema["views"][name].update(ddl)
+            except Exception:
+                schema["views"] = {'error': 'Insufficient privileges to read views.'}
 
 
             # -------------------------------------------------------------
             # PROCEDURES
             # -------------------------------------------------------------
+            try:
+                procedures = conn.execute(text("SHOW PROCEDURE STATUS WHERE Db = :db"), {"db": database}).mappings()
 
-            procedures = conn.execute(text("SHOW PROCEDURE STATUS WHERE Db = :db"), {"db": database}).mappings()
-
-            for proc in procedures:
-                name = proc['Name']
-                schema["procedures"] = self.__extract_ddl_details(conn, file_exporter, "Procedure", name)
+                for proc in procedures:
+                    name = proc['Name']
+                    proc_data = self.__extract_ddl_details(conn, file_exporter, "Procedure", name)
+                    schema["procedures"][name] = proc_data.get(name)
+            except Exception:
+                schema["procedures"] = {'error': 'Insufficient privileges to read procedures.'}
 
 
             # -------------------------------------------------------------
             # FUNCTIONS
             # -------------------------------------------------------------
+            try:
+                functions = conn.execute(text("SHOW FUNCTION STATUS WHERE Db = :db"), {"db": database}).mappings()
 
-            functions = conn.execute(text("SHOW FUNCTION STATUS WHERE Db = :db"), {"db": database}).mappings()
-
-            for func in functions:
-                name = func['Name']
-                schema["functions"] = self.__extract_ddl_details(conn, file_exporter, "Function", name)
+                for func in functions:
+                    name = func['Name']
+                    func_data = self.__extract_ddl_details(conn, file_exporter, "Function", name)
+                    schema["functions"][name] = func_data.get(name)
+            except Exception:
+                schema["functions"] = {'error': 'Insufficient privileges to read functions.'}
 
 
             # -------------------------------------------------------------
             # TRIGGERS
             # -------------------------------------------------------------
+            try:
+                triggers = conn.execute(text("SHOW TRIGGERS")).mappings()
+                for trigger in triggers:
+                    name = trigger['Trigger']
+                    sql_content = trigger['Statement']
 
-            triggers = conn.execute(text("SHOW TRIGGERS")).mappings()
-            for trigger in triggers:
-                name = trigger['Trigger']
-                sql_content = trigger['Statement']
+                    schema['triggers'][name] = {
+                        'table': trigger['Table'],
+                        'timing': trigger['Timing'],
+                        'event': trigger['Event']
+                    }
 
-                schema['triggers'][name] = {
-                    'table': trigger['Table'],
-                    'timing': trigger['Timing'],
-                    'event': trigger['Event']
-                }
-
-                if file_exporter:
-                    sql_path = file_exporter.save_sql('triggers', name, sql_content)
-                    schema['triggers'][name]['definition_file'] = sql_path
-                else:
-                    schema['triggers'][name]['definition'] = str(sql_content)
+                    if file_exporter:
+                        sql_path = file_exporter.save_sql('triggers', name, sql_content)
+                        schema['triggers'][name]['definition_file'] = sql_path
+                    else:
+                        schema['triggers'][name]['definition'] = str(sql_content)
+            except Exception:
+                schema["triggers"] = {'error': 'Insufficient privileges to read triggers.'}
 
         return schema
+
 
     def __extract_table_details(self, conn, table_name, database=None):
         """
@@ -111,8 +128,7 @@ class MySQLSchemaExtractor(SchemaExtractorAdapter):
             'primary_key': pk_constraint.get('constrained_columns', []),
             'indexes': [],
             'foreign_keys': [],
-            'checks': [],
-            'virtual_foreign_keys': []
+            'checks': []
         }
 
         column_info_query = text(f"""

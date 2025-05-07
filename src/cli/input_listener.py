@@ -2,24 +2,26 @@ import argparse
 import os
 import json
 
-from constants.constants import SUPPORTED_SGBD, SYSTEM_TABLE_SGBD
+import pyodbc
+from constants.constants import SUPPORTED_SGBD, SYSTEM_TABLE_SGBD, DEFAULT_PORT
 from core import Core
+
 
 class input_listener:
     def __init__(self):
         self.args = self.parse_arguments()
 
     def parse_arguments(self):
-        parser = argparse.ArgumentParser(description="Export DB schema to JSON.")
-        parser.add_argument('--db_type', type=str, required=True, help=f"Database type (supported SGBD: {', '.join(SUPPORTED_SGBD)})")
-        parser.add_argument('--host', type=str, required=True, default="127.0.0.1", help="Database host")
-        parser.add_argument('--port', type=int, required=True, help="Database port")
-        parser.add_argument('--user', type=str, required=True, help="Database user")
-        parser.add_argument('--password', type=str, required=True, help="Database password")
-        parser.add_argument('--output', type=str, required=False, default="./", help="Output directory")
-        parser.add_argument('--restriction_list', type=str, required=False, help="Path to JSON file containing a list of restricted databases or tables to exclude.")
-        parser.add_argument('--exclude_system_databases', type=bool, required=False, default=True, help="Exclude system databases like 'sys' or 'master' (default: True)")
-        parser.add_argument('--databases', type=str, nargs='*', required=False, help="List of databases to export. (default: all databases)")
+        parser = argparse.ArgumentParser(description="Export DB schema to JSON for git versionning.")
+        parser.add_argument('--db_type', '-t', '--type', type=str, required=True, help=f"Database type (supported SGBD: {', '.join(SUPPORTED_SGBD)})")
+        parser.add_argument('--host', '-i', type=str, required=True, default="127.0.0.1", help="Database host")
+        parser.add_argument('--port', type=int, required=False, help="Database port")
+        parser.add_argument('--user', '-u', type=str, required=False, help="Database user")
+        parser.add_argument('--password', '-p', type=str, required=False, help="Database password")
+        parser.add_argument('--output', '-o', type=str, required=False, default="./", help="Output directory")
+        parser.add_argument('--restriction_list', '-r', type=str, required=False, help="Path to JSON file containing a list of restricted databases or tables to exclude.")
+        parser.add_argument('--exclude_system_databases', '-e', type=bool, required=False, default=True, help="Exclude system databases like 'sys' or 'master' (default: True)")
+        parser.add_argument('--databases', '-d', type=str, nargs='*', required=False, help="List of databases to export. (default: all databases)")
 
         args = parser.parse_args()
         return args
@@ -56,8 +58,35 @@ class input_listener:
         restriction_list = self.load_restriction_list()
         exclude_system_databases = self.args.exclude_system_databases
 
+        #Check if ODBC Driver 18 for SQL Server
+        if db_type == 'mssql':
+            driver = pyodbc.drivers()
+            if "ODBC Driver 18 for SQL Server" not in driver:
+                raise ValueError("No ODBC SQL Server driver found. Please install 'ODBC Driver 18 for SQL Server'.")
+
+        if db_type == 'mssql':
+            if "ODBC Driver 18 for SQL Server" not in driver:
+                raise ValueError("No ODBC SQL Server driver found. Please install 'ODBC Driver 18 for SQL Server'.")
+
+
+
+    # Fallback logic for Windows Auth if user/pass not provided
+        if not user and not password:
+            if db_type == 'mssql':
+                use_windows_auth = True
+            else:
+                raise ValueError("Missing credentials: user and password are required for non-MSSQL databases.")
+        else:
+            use_windows_auth = False
+
         if db_type not in SUPPORTED_SGBD:
             raise ValueError(f"Unsupported database type: {db_type}. Supported types are: {', '.join(SUPPORTED_SGBD)}")
+
+        if not port:
+            port = DEFAULT_PORT.get(db_type)
+
+        if not port:
+            raise ValueError(f"Port not specified and no default port available for {db_type}.")
 
         system_tables = SYSTEM_TABLE_SGBD[db_type]
 
@@ -84,7 +113,8 @@ class input_listener:
             output=output,
             system_tables=system_tables,
             restriction_list=restriction_list,
-            exclude_system_databases=exclude_system_databases
+            exclude_system_databases=exclude_system_databases,
+            use_windows_auth=use_windows_auth
         )
 
         extractor.run()

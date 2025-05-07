@@ -9,7 +9,7 @@ from utils.schema_updater import SchemaUpdater
 
 
 class Core:
-    def __init__(self, db_type, host, port, user, password, output, databases=None, system_tables=None, restriction_list=None, exclude_system_databases=True):
+    def __init__(self, db_type, host, port, user, password, output, databases=None, system_tables=None, restriction_list=None, exclude_system_databases=True, use_windows_auth=False):
         self.db_type = db_type
         self.host = host
         self.port = port
@@ -18,6 +18,7 @@ class Core:
         self.outputDir = output
         self.databases = databases
         self.restriction_list = restriction_list if restriction_list else []
+        self.use_windows_auth = use_windows_auth
 
         if exclude_system_databases and system_tables:
             self.restriction_list.extend(system_tables)
@@ -31,7 +32,8 @@ class Core:
             port=int(self.port),
             user=self.user,
             password=self.password,
-            databases=self.databases
+            databases=self.databases,
+            use_windows_auth=self.use_windows_auth
         )
 
         Logger.Info("Connecting to database server and extracting list of databases...")

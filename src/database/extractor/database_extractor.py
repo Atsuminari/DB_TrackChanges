@@ -2,15 +2,13 @@ from database.connection import DatabaseConnection
 from database.factory import DatabaseExtractorFactory
 
 class DatabaseExtractor:
-    def __init__(self, db_type, host, port, user, password, databases=None):
+    def __init__(self, db_type, host, port, user=None, password=None, databases=None, use_windows_auth=False):
+        self.connection = DatabaseConnection(
+            db_type, host, port, user, password, None, use_windows_auth
+        )
+        self.database = None
         self.db_type = db_type
-        self.host = host
-        self.port = port
-        self.user = user
-        self.password = password
         self.databases = databases
-        self.virtual_foreign_keys = {}
-        self.connection = DatabaseConnection(db_type, host, port, user, password)
 
     def list_databases(self):
         if self.databases:

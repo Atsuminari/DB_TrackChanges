@@ -6,3 +6,9 @@ SYSTEM_TABLE_SGBD = {
     "mariadb": ["sys", "mysql", "performance_schema", "information_schema"],
     "mssql": ["master", "tempdb", "model", "msdb"]
 }
+
+DEFAULT_PORT = {
+    "mysql": 3306,
+    "mariadb": 3306,
+    "mssql": 1433
+}

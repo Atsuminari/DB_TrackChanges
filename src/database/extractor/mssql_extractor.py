@@ -1,7 +1,10 @@
 from sqlalchemy import text, inspect
 from adapter.schema_extractor_adapter import SchemaExtractorAdapter
+from sqlalchemy.exc import DBAPIError
+
 
 class MSSQLSchemaExtractor(SchemaExtractorAdapter):
+
     def extract_schema(self, file_exporter=None, database=None) -> dict:
         """
         Extract the schema of the database including tables, views, procedures, functions, and triggers.
@@ -41,78 +44,98 @@ class MSSQLSchemaExtractor(SchemaExtractorAdapter):
             # VIEWS
             # -------------------------------------------------------------
 
-            views = conn.execute(text("""
-                SELECT TABLE_NAME 
-                FROM INFORMATION_SCHEMA.VIEWS 
-                WHERE TABLE_CATALOG = :db
-            """), {"db": database}).fetchall()
+            try:
+                views = conn.execute(text("""
+                    SELECT TABLE_NAME 
+                    FROM INFORMATION_SCHEMA.VIEWS 
+                    WHERE TABLE_CATALOG = :db
+                """), {"db": database}).fetchall()
 
-            for view in views:
-                name = view[0]
-                schema['views'][name] = self.__extract_view_details(conn, name)
+                for view in views:
+                    name = view[0]
+                    schema['views'][name] = self.__extract_view_details(conn, name)
 
-                if file_exporter:
-                    ddl = self.__extract_ddl_details(conn, file_exporter, "VIEW", name)
-                    schema["views"][name].update(ddl)
+                    if file_exporter:
+                        ddl = self.__extract_ddl_details(conn, file_exporter, "VIEW", name)
+                        schema["views"][name].update(ddl)
+            except DBAPIError:
+                schema['views'] = {'error': 'Insufficient privileges to access views'}
 
 
             # -------------------------------------------------------------
             # PROCEDURES
             # -------------------------------------------------------------
 
-            procedures = conn.execute(text("""
-                SELECT SPECIFIC_NAME 
-                FROM INFORMATION_SCHEMA.ROUTINES 
-                WHERE ROUTINE_TYPE = 'PROCEDURE' AND ROUTINE_CATALOG = :db
-            """), {"db": database}).fetchall()
+            try:
+                procedures = conn.execute(text("""
+                    SELECT SPECIFIC_NAME 
+                    FROM INFORMATION_SCHEMA.ROUTINES 
+                    WHERE ROUTINE_TYPE = 'PROCEDURE' AND ROUTINE_CATALOG = :db
+                """), {"db": database}).fetchall()
 
-            for proc in procedures:
-                name = proc[0]
-                schema["procedures"][name] = self.__extract_ddl_details(conn, file_exporter, "PROCEDURE", name)
-
+                for proc in procedures:
+                    name = proc[0]
+                    try:
+                        schema["procedures"][name] = self.__extract_ddl_details(conn, file_exporter, "PROCEDURE", name)
+                    except DBAPIError:
+                        schema["procedures"][name] = {'error': 'Insufficient privileges'}
+            except DBAPIError:
+                schema["procedures"] = {'error': 'Insufficient privileges to list procedures'}
 
             # -------------------------------------------------------------
             # FUNCTIONS
             # -------------------------------------------------------------
 
-            functions = conn.execute(text("""
-                SELECT SPECIFIC_NAME 
-                FROM INFORMATION_SCHEMA.ROUTINES 
-                WHERE ROUTINE_TYPE = 'FUNCTION' AND ROUTINE_CATALOG = :db
-            """), {"db": database}).fetchall()
+            try:
+                functions = conn.execute(text("""
+                    SELECT SPECIFIC_NAME 
+                    FROM INFORMATION_SCHEMA.ROUTINES 
+                    WHERE ROUTINE_TYPE = 'FUNCTION' AND ROUTINE_CATALOG = :db
+                """), {"db": database}).fetchall()
 
-            for func in functions:
-                name = func[0]
-                schema["functions"][name] = self.__extract_ddl_details(conn, file_exporter, "FUNCTION", name)
-
+                for func in functions:
+                    name = func[0]
+                    try:
+                        schema["functions"][name] = self.__extract_ddl_details(conn, file_exporter, "FUNCTION", name)
+                    except DBAPIError:
+                        schema["functions"][name] = {'error': 'Insufficient privileges'}
+            except DBAPIError:
+                schema["functions"] = {'error': 'Insufficient privileges to list functions'}
 
             # -------------------------------------------------------------
             # TRIGGERS
             # -------------------------------------------------------------
 
-            triggers = conn.execute(text("""
-                SELECT name, parent_id, type_desc 
-                FROM sys.triggers 
-                WHERE parent_id != 0
-            """)).fetchall()
+            try:
 
-            for trigger in triggers:
-                name = trigger[0]
+                triggers = conn.execute(text("""
+                    SELECT name, parent_id, type_desc 
+                    FROM sys.triggers 
+                    WHERE parent_id != 0
+                """)).fetchall()
 
-                trigger_def = conn.execute(text(f"""
-                    SELECT OBJECT_DEFINITION (OBJECT_ID(:name)) AS trigger_definition
-                """), {"name": name}).scalar()
+                for trigger in triggers:
+                    name = trigger[0]
 
-                schema['triggers'][name] = {
-                    'table_id': trigger[1],
-                    'type': trigger[2],
-                }
+                    try:
+                        trigger_def = conn.execute(text(f"""
+                            SELECT OBJECT_DEFINITION (OBJECT_ID(:name)) AS trigger_definition
+                        """), {"name": name}).scalar()
 
-                if file_exporter:
-                    sql_path = file_exporter.save_sql('triggers', name, trigger_def)
-                    schema['triggers'][name]['definition_file'] = sql_path
-                else:
-                    schema['triggers'][name]['definition'] = str(trigger_def)
+                        schema['triggers'][name] = {
+                            'table_id': trigger[1],
+                            'type': trigger[2],
+                        }
+
+                        if file_exporter:
+                            sql_path = file_exporter.save_sql('triggers', name, trigger_def)
+                            schema['triggers'][name]['definition_file'] = sql_path
+                        else:
+                            schema['triggers'][name]['definition'] = str(trigger_def)
+                    except DBAPIError:
+                        schema['triggers'][name] = {'error': 'Insufficient privileges'}
+            except DBAPIError:
+                schema["triggers"] = {'error': 'Insufficient privileges to list triggers'}
 
         return schema
 
@@ -151,7 +174,6 @@ class MSSQLSchemaExtractor(SchemaExtractorAdapter):
             'indexes': [],
             'foreign_keys': [],
             'checks': [],
-            'virtual_foreign_keys': []  # Not really a concept in MSSQL, keep empty
         }
 
         for column in columns:
@@ -261,9 +283,17 @@ class MSSQLSchemaExtractor(SchemaExtractorAdapter):
 
     def list_databases(self):
         """
-        List all databases in the MSSQL server.
-        :return: List of database names
+        List only the databases the current user has access to.
+        :return: List of accessible database names
         """
+        with self.connection.engine.connect() as conn:
+            databases = conn.execute(text("""
+                SELECT name 
+                FROM sys.databases 
+                WHERE HAS_DBACCESS(name) = 1
+            """)).fetchall()
+            return [db[0] for db in databases]
+
         with self.connection.engine.connect() as conn:
             databases = conn.execute(text("SELECT name FROM sys.databases")).fetchall()
             return [db[0] for db in databases]

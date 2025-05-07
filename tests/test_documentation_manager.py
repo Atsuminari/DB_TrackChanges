@@ -36,7 +36,6 @@ def test_update_or_remove(temp_doc_file):
                 'indexes': [],
                 'foreign_keys': [],
                 'checks': [],
-                'virtual_foreign_keys': []
             }
         },
         'procedures': {},
