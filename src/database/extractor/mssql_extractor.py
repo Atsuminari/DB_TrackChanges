@@ -26,18 +26,21 @@ class MSSQLSchemaExtractor(SchemaExtractorAdapter):
             """), {"db": database}).fetchall()
 
             for table in tables:
-                schema['tables'][table[0]] = self.__extract_table_details(conn, table[0])
+                try:
+                    schema['tables'][table[0]] = self.__extract_table_details(conn, table[0])
 
-                create_table_script = self.__generate_create_table_script(
-                    table[0],
-                    schema['tables'][table[0]]['columns'],
-                    schema['tables'][table[0]]['primary_key'],
-                    schema['tables'][table[0]]['foreign_keys'],
-                    schema['tables'][table[0]]['checks']
-                )
+                    create_table_script = self.__generate_create_table_script(
+                        table[0],
+                        schema['tables'][table[0]]['columns'],
+                        schema['tables'][table[0]]['primary_key'],
+                        schema['tables'][table[0]]['foreign_keys'],
+                        schema['tables'][table[0]]['checks']
+                    )
 
-                if file_exporter:
-                    file_exporter.save_sql('tables', table[0], create_table_script)
+                    if file_exporter:
+                        file_exporter.save_sql('tables', table[0], create_table_script)
+                except DBAPIError:
+                    schema['tables'][table[0]] = {'error': 'Insufficient privileges to access table'}
 
 
             # -------------------------------------------------------------
