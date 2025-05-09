@@ -41,6 +41,8 @@ class MSSQLSchemaExtractor(SchemaExtractorAdapter):
                         file_exporter.save_sql('tables', table[0], create_table_script)
                 except DBAPIError:
                     schema['tables'][table[0]] = {'error': 'Insufficient privileges to access table'}
+                except:
+                    continue
 
 
             # -------------------------------------------------------------
@@ -56,11 +58,17 @@ class MSSQLSchemaExtractor(SchemaExtractorAdapter):
 
                 for view in views:
                     name = view[0]
-                    schema['views'][name] = self.__extract_view_details(conn, name)
+                    try:
+                        schema['views'][name] = self.__extract_view_details(conn, name)
 
-                    if file_exporter:
-                        ddl = self.__extract_ddl_details(conn, file_exporter, "VIEW", name)
-                        schema["views"][name].update(ddl)
+                        if file_exporter:
+                            ddl = self.__extract_ddl_details(conn, file_exporter, "VIEW", name)
+                            schema["views"][name].update(ddl)
+                    except DBAPIError:
+                        schema['views'][name] = {'error': 'Insufficient privileges to access view'}
+                    except:
+                        continue
+
             except DBAPIError:
                 schema['views'] = {'error': 'Insufficient privileges to access views'}
 
@@ -82,6 +90,9 @@ class MSSQLSchemaExtractor(SchemaExtractorAdapter):
                         schema["procedures"][name] = self.__extract_ddl_details(conn, file_exporter, "PROCEDURE", name)
                     except DBAPIError:
                         schema["procedures"][name] = {'error': 'Insufficient privileges'}
+                    except:
+                        continue
+
             except DBAPIError:
                 schema["procedures"] = {'error': 'Insufficient privileges to list procedures'}
 
@@ -102,6 +113,9 @@ class MSSQLSchemaExtractor(SchemaExtractorAdapter):
                         schema["functions"][name] = self.__extract_ddl_details(conn, file_exporter, "FUNCTION", name)
                     except DBAPIError:
                         schema["functions"][name] = {'error': 'Insufficient privileges'}
+                    except:
+                        continue
+
             except DBAPIError:
                 schema["functions"] = {'error': 'Insufficient privileges to list functions'}
 
@@ -110,7 +124,6 @@ class MSSQLSchemaExtractor(SchemaExtractorAdapter):
             # -------------------------------------------------------------
 
             try:
-
                 triggers = conn.execute(text("""
                     SELECT name, parent_id, type_desc 
                     FROM sys.triggers 
@@ -137,6 +150,9 @@ class MSSQLSchemaExtractor(SchemaExtractorAdapter):
                             schema['triggers'][name]['definition'] = str(trigger_def)
                     except DBAPIError:
                         schema['triggers'][name] = {'error': 'Insufficient privileges'}
+                    except:
+                        continue
+
             except DBAPIError:
                 schema["triggers"] = {'error': 'Insufficient privileges to list triggers'}
 

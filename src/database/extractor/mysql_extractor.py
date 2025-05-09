@@ -1,5 +1,8 @@
+import sys
+
 from sqlalchemy import text, inspect
 from adapter.schema_extractor_adapter import SchemaExtractorAdapter
+from sqlalchemy.exc import DBAPIError
 
 
 class MySQLSchemaExtractor(SchemaExtractorAdapter):
@@ -22,18 +25,24 @@ class MySQLSchemaExtractor(SchemaExtractorAdapter):
                 tables = conn.execute(text("SHOW FULL TABLES WHERE Table_type = 'BASE TABLE'")).fetchall()
 
                 for table in tables:
-                    schema['tables'][table[0]] = self.__extract_table_details(conn, table[0], database)
+                    try:
+                        schema['tables'][table[0]] = self.__extract_table_details(conn, table[0], database)
 
-                    create_table_script = self.__generate_create_table_script(
-                        table[0],
-                        schema['tables'][table[0]]['columns'],
-                        schema['tables'][table[0]]['primary_key'],
-                        schema['tables'][table[0]]['foreign_keys'],
-                        schema['tables'][table[0]]['checks']
-                    )
+                        create_table_script = self.__generate_create_table_script(
+                            table[0],
+                            schema['tables'][table[0]]['columns'],
+                            schema['tables'][table[0]]['primary_key'],
+                            schema['tables'][table[0]]['foreign_keys'],
+                            schema['tables'][table[0]]['checks']
+                        )
 
-                    if file_exporter:
-                        file_exporter.save_sql('tables', table[0], create_table_script)
+                        if file_exporter:
+                            file_exporter.save_sql('tables', table[0], create_table_script)
+                    except DBAPIError:
+                        schema['tables'][table[0]] = {'error': 'Insufficient privileges to read table.'}
+                    except:
+                        continue
+
             except Exception as e:
                 schema['tables'] = {'error': f'Could not read tables: {str(e)}'}
 
@@ -45,12 +54,17 @@ class MySQLSchemaExtractor(SchemaExtractorAdapter):
                 views = conn.execute(text("SHOW FULL TABLES WHERE Table_type = 'VIEW'")).fetchall()
                 for view in views:
                     name = view[0]
-                    schema["views"][name] = self.__extract_view_details(conn, name)
-                    if file_exporter:
-                        ddl = self.__extract_ddl_details(conn, file_exporter, "View", name)
-                        schema["views"][name].update(ddl)
-            except Exception:
-                schema["views"] = {'error': 'Insufficient privileges to read views.'}
+                    try:
+                        schema["views"][name] = self.__extract_view_details(conn, name)
+                        if file_exporter:
+                            ddl = self.__extract_ddl_details(conn, file_exporter, "View", name)
+                            schema["views"][name].update(ddl)
+                    except DBAPIError:
+                        schema["views"][name] = {'error': 'Insufficient privileges to read view.'}
+                    except:
+                        continue
+            except Exception as e:
+                schema['views'] = {'error': f'Could not read views: {str(e)}'}
 
 
             # -------------------------------------------------------------
@@ -61,8 +75,15 @@ class MySQLSchemaExtractor(SchemaExtractorAdapter):
 
                 for proc in procedures:
                     name = proc['Name']
-                    proc_data = self.__extract_ddl_details(conn, file_exporter, "Procedure", name)
-                    schema["procedures"][name] = proc_data.get(name)
+
+                    try:
+                        proc_data = self.__extract_ddl_details(conn, file_exporter, "Procedure", name)
+                        schema["procedures"][name] = proc_data.get(name)
+                    except DBAPIError:
+                        schema["procedures"][name] = {'error': 'Insufficient privileges to read procedure.'}
+                    except:
+                        continue
+
             except Exception:
                 schema["procedures"] = {'error': 'Insufficient privileges to read procedures.'}
 
@@ -75,8 +96,14 @@ class MySQLSchemaExtractor(SchemaExtractorAdapter):
 
                 for func in functions:
                     name = func['Name']
-                    func_data = self.__extract_ddl_details(conn, file_exporter, "Function", name)
-                    schema["functions"][name] = func_data.get(name)
+                    try:
+                        func_data = self.__extract_ddl_details(conn, file_exporter, "Function", name)
+                        schema["functions"][name] = func_data.get(name)
+                    except DBAPIError:
+                        schema["functions"][name] = {'error': 'Insufficient privileges to read function.'}
+                    except:
+                        continue
+
             except Exception:
                 schema["functions"] = {'error': 'Insufficient privileges to read functions.'}
 
@@ -88,19 +115,25 @@ class MySQLSchemaExtractor(SchemaExtractorAdapter):
                 triggers = conn.execute(text("SHOW TRIGGERS")).mappings()
                 for trigger in triggers:
                     name = trigger['Trigger']
-                    sql_content = trigger['Statement']
+                    try:
+                        sql_content = trigger['Statement']
 
-                    schema['triggers'][name] = {
-                        'table': trigger['Table'],
-                        'timing': trigger['Timing'],
-                        'event': trigger['Event']
-                    }
+                        schema['triggers'][name] = {
+                            'table': trigger['Table'],
+                            'timing': trigger['Timing'],
+                            'event': trigger['Event']
+                        }
 
-                    if file_exporter:
-                        sql_path = file_exporter.save_sql('triggers', name, sql_content)
-                        schema['triggers'][name]['definition_file'] = sql_path
-                    else:
-                        schema['triggers'][name]['definition'] = str(sql_content)
+                        if file_exporter:
+                            sql_path = file_exporter.save_sql('triggers', name, sql_content)
+                            schema['triggers'][name]['definition_file'] = sql_path
+                        else:
+                            schema['triggers'][name]['definition'] = str(sql_content)
+                    except DBAPIError:
+                        schema['triggers'][name] = {'error': 'Insufficient privileges to read trigger.'}
+                    except:
+                        continue
+
             except Exception:
                 schema["triggers"] = {'error': 'Insufficient privileges to read triggers.'}
 
