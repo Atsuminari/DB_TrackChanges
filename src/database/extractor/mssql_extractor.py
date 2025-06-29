@@ -1,5 +1,7 @@
+import re
+
 from sqlalchemy import text, inspect
-from adapter.schema_extractor_adapter import SchemaExtractorAdapter
+from src.adapter.schema_extractor_adapter import SchemaExtractorAdapter
 from sqlalchemy.exc import DBAPIError
 
 
@@ -30,6 +32,7 @@ class MSSQLSchemaExtractor(SchemaExtractorAdapter):
                     schema['tables'][table[0]] = self.__extract_table_details(conn, table[0])
 
                     create_table_script = self.__generate_create_table_script(
+                        conn,
                         table[0],
                         schema['tables'][table[0]]['columns'],
                         schema['tables'][table[0]]['primary_key'],
@@ -132,24 +135,10 @@ class MSSQLSchemaExtractor(SchemaExtractorAdapter):
 
                 for trigger in triggers:
                     name = trigger[0]
-
                     try:
-                        trigger_def = conn.execute(text(f"""
-                            SELECT OBJECT_DEFINITION (OBJECT_ID(:name)) AS trigger_definition
-                        """), {"name": name}).scalar()
-
-                        schema['triggers'][name] = {
-                            'table_id': trigger[1],
-                            'type': trigger[2],
-                        }
-
-                        if file_exporter:
-                            sql_path = file_exporter.save_sql('triggers', name, trigger_def)
-                            schema['triggers'][name]['definition_file'] = sql_path
-                        else:
-                            schema['triggers'][name]['definition'] = str(trigger_def)
+                        schema["triggers"][name] = self.__extract_ddl_details(conn, file_exporter, "TRIGGER", name)
                     except DBAPIError:
-                        schema['triggers'][name] = {'error': 'Insufficient privileges'}
+                        schema["triggers"][name] = {'error': 'Insufficient privileges'}
                     except:
                         continue
 
@@ -249,7 +238,7 @@ class MSSQLSchemaExtractor(SchemaExtractorAdapter):
 
     def __extract_ddl_details(self, conn, file_exporter, object_type, object_name):
         """
-        Extract the DDL of a view, procedure or function.
+        Extract the DDL of a view, procedure, function or trigger.
         """
         schema = {}
 
@@ -258,19 +247,24 @@ class MSSQLSchemaExtractor(SchemaExtractorAdapter):
         """), {"name": object_name}).scalar()
 
         if ddl:
+            ddl = ddl.replace("\r", "")
+            pattern = r"""((?:/\*.*?\*/|--[^\n]*|[^C/\\-]+|[C/\\-](?!REATE|[*-]))*?)\bCREATE\b"""
+            ddl = re.sub(pattern, r"\1CREATE OR ALTER", ddl, count=1, flags=re.IGNORECASE | re.DOTALL | re.VERBOSE)
+
             if file_exporter:
-                sql_path = file_exporter.save_sql(f"{object_type.lower()}s", object_name, ddl.replace("\r", ""))
+                sql_path = file_exporter.save_sql(f"{object_type.lower()}s", object_name, ddl)
                 schema = {'definition_file': sql_path}
             else:
                 schema = {'definition': str(ddl)}
 
         return schema
 
-    def __generate_create_table_script(self, table_name, columns, primary_key, foreign_keys, checks):
+
+    def __generate_create_table_script(self, conn, table_name, columns, primary_key, foreign_keys, checks):
         """
         Generate the CREATE TABLE script for MSSQL.
         """
-        script = f"CREATE TABLE [{table_name}] (\n"
+        script = f"CREATE OR ALTER TABLE [{table_name}] (\n"
 
         # Column definitions
         column_definitions = []
@@ -296,9 +290,59 @@ class MSSQLSchemaExtractor(SchemaExtractorAdapter):
         for check in checks:
             script += f",\n    CONSTRAINT [{check['name']}] CHECK ({check['sqltext']})"
 
-        script += "\n);"
+        script += "\n);\n"
+
+        # Ajouter les CREATE INDEX
+        for index in self.__get_table_indexes_mssql(conn, table_name):
+            cols = ', '.join(index['columns'])
+            script += f"\nCREATE INDEX [{index['name']}] ON [{table_name}] ({cols});"
 
         return script
+
+    def __get_table_indexes_mssql(self, conn, table_name):
+        """
+        Custom method to retrieve indexes for a table in MSSQL.
+        """
+        indexes_query = text("""
+            SELECT 
+                i.name AS index_name,
+                c.name AS column_name,
+                i.is_unique
+            FROM 
+                sys.indexes i
+            INNER JOIN 
+                sys.index_columns ic ON i.object_id = ic.object_id AND i.index_id = ic.index_id
+            INNER JOIN 
+                sys.columns c ON ic.object_id = c.object_id AND ic.column_id = c.column_id
+            INNER JOIN 
+                sys.tables t ON i.object_id = t.object_id
+            WHERE 
+                t.name = :table_name
+                AND i.is_primary_key = 0 -- exclude primary key
+                AND i.type_desc <> 'HEAP'
+            ORDER BY 
+                i.name, ic.key_ordinal
+        """)
+
+        result = conn.execute(indexes_query, {"table_name": table_name}).fetchall()
+
+        indexes = {}
+        for row in result:
+            index_name = row[0]
+            column_name = row[1]
+            is_unique = row[2]
+
+            if index_name not in indexes:
+                indexes[index_name] = {
+                    "name": index_name,
+                    "columns": [],
+                    "is_unique": is_unique
+                }
+
+            indexes[index_name]["columns"].append(column_name)
+
+        return list(indexes.values())
+
 
     def list_databases(self):
         """
